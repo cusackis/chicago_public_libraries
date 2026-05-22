@@ -1,0 +1,9 @@
+pandas
+numpy
+folium
+plotly
+plotly.express
+dash
+glob
+os
+beautifulsoup4
