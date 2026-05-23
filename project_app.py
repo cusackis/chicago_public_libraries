@@ -15,9 +15,15 @@ from bs4 import BeautifulSoup
 df = pd.read_csv('data/master_with_coords.csv')
 df = df[df['LAT'].notna()].copy()
 
+# ── Load branch contact info ───────────────────────────────────────────────────
+locs = pd.read_csv('data/raw_data/library_locations.csv')
+locs.columns = locs.columns.str.strip().str.replace('"', '').str.strip()
+locs = locs.rename(columns={'LONG': 'LON'})
+locs['BRANCH'] = locs['BRANCH'].str.strip().str.strip('*')
+
 # ── Compute digital vs physical ratio ─────────────────────────────────────────
 df['DIGITAL']       = df['COMPUTER SESSIONS'].fillna(0)
-df['PHYSICAL']      = df['VISITORS'].fillna(0) + df['CIRCULATION'].fillna(0)
+df['PHYSICAL']      = df['CIRCULATION'].fillna(0)
 df['TOTAL']         = df['DIGITAL'] + df['PHYSICAL']
 df['DIGITAL_RATIO'] = (df['DIGITAL'] / df['TOTAL'].replace(0, np.nan) * 100).round(1)
 
@@ -91,13 +97,23 @@ dashboard_layout = html.Div([
                             'style': {'fontSize': '12px', 'color': cpl_text_muted}} 
                    for y in years},
             tooltip={'placement': 'bottom', 'always_visible': False}
+        ),
+        dcc.Checklist(
+            id='exclude-hw',
+            options=[{'label': ' Exclude Harold Washington Library Center', 'value': 'exclude'}],
+            value=[],
+            style={'fontSize': '13px', 'color': cpl_text_muted}
         )
     ], style={'padding': '16px 32px 16px', 'backgroundColor': cpl_white,
               'borderBottom': f'1px solid #e0e0e0'}),
 
     # Map
     dcc.Graph(id='map', style={'height': '480px'}),
-
+    
+    # Collapsible detail panel — appears when a map bubble is clicked
+    html.Div(id='branch-detail-panel',
+         style={'display': 'none'}),  # hidden by default
+    
     # Bottom row of two graphs
     html.Div([
         html.Div([dcc.Graph(id='bar-chart',   style={'height': '360px'})], 
@@ -228,6 +244,49 @@ events_layout = html.Div([
 
 ], style={'backgroundColor': cpl_gray, 'minHeight': '600px'})
 
+# ── Directory layout ────────────────────────────────────────────────────────────────
+
+directory_layout = html.Div([
+
+    # Search bar
+    html.Div([
+        html.Div([
+            html.Label('Search Branch', style={'fontSize': '13px', 'fontWeight': '600',
+                                               'color': cpl_green, 'marginBottom': '4px',
+                                               'display': 'block'}),
+            dcc.Input(id='dir-search', type='text',
+                      placeholder='Search by name, address, or ZIP...',
+                      debounce=True,
+                      style={'width': '100%', 'padding': '8px', 'fontSize': '13px',
+                             'border': '1px solid #ddd', 'borderRadius': '4px',
+                             'boxSizing': 'border-box'})
+        ], style={'flex': '3', 'minWidth': '250px'}),
+
+        html.Div([
+            html.Label('ZIP Code', style={'fontSize': '13px', 'fontWeight': '600',
+                                          'color': cpl_green, 'marginBottom': '4px',
+                                          'display': 'block'}),
+            dcc.Dropdown(id='dir-zip-filter', value='All', clearable=False,
+                         style={'fontSize': '13px'})
+        ], style={'flex': '1', 'minWidth': '150px'}),
+
+    ], style={'display': 'flex', 'gap': '16px', 'padding': '16px 24px',
+              'backgroundColor': cpl_white, 'borderBottom': '1px solid #E0E0E0',
+              'flexWrap': 'wrap', 'alignItems': 'flex-start'}),
+
+    # Summary
+    html.Div(id='dir-summary',
+             style={'padding': '10px 24px', 'backgroundColor': cpl_green_light,
+                    'borderBottom': '1px solid #C8E0CB',
+                    'fontSize': '13px', 'color': cpl_text_muted}),
+
+    # Branch cards grid
+    html.Div(id='dir-cards',
+             style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '16px',
+                    'padding': '20px 24px'})
+
+], style={'backgroundColor': cpl_gray, 'minHeight': '600px'})
+
 # ── Main layout ────────────────────────────────────────────────────────────────
 app.layout = html.Div([
 
@@ -294,6 +353,12 @@ app.layout = html.Div([
                                     'fontWeight': '600',
                                     'borderTop': f'3px solid {cpl_green}',
                                     'color': cpl_green}),
+            dcc.Tab(label='📋 Branch Directory', value='tab-directory',
+                    style={'fontFamily': 'Arial', 'fontSize': '14px', 'minWidth': '160px'},
+                    selected_style={'fontFamily': 'Arial', 'fontSize': '14px',
+                        'fontWeight': '600', 'minWidth': '160px',
+                        'borderTop': f'3px solid {cpl_green}',
+                        'color': cpl_green}),
         ],
         style={'backgroundColor': cpl_white, 'borderBottom': '1px solid #E0E0E0'}
     ),
@@ -303,6 +368,143 @@ app.layout = html.Div([
 
 ], style={'fontFamily': 'Arial, sans-serif', 'backgroundColor': cpl_gray,
           'maxWidth': '1400px', 'margin': '0 auto'})
+
+# ── Callback: populate directory ZIP dropdown ──────────────────────────────────
+@app.callback(
+    Output('dir-zip-filter', 'options'),
+    Input('tabs', 'value')
+)
+def populate_dir_filters(tab):
+    if tab != 'tab-directory':
+        return []
+    zips = sorted(locs['ZIP'].astype(str).str.split('.').str[0].unique())
+    return [{'label': 'All ZIPs', 'value': 'All'}] + \
+           [{'label': z, 'value': z} for z in zips]
+
+
+# ── Callback: render branch cards ─────────────────────────────────────────────
+@app.callback(
+    Output('dir-cards',   'children'),
+    Output('dir-summary', 'children'),
+    Input('dir-search',     'value'),
+    Input('dir-zip-filter', 'value'),
+)
+def update_directory(search, zip_filter):
+    filtered = locs.copy()
+
+    if search:
+        mask = (
+            filtered['BRANCH'].str.contains(search, case=False, na=False) |
+            filtered['ADDRESS'].str.contains(search, case=False, na=False) |
+            filtered['ZIP'].astype(str).str.contains(search, na=False)
+        )
+        filtered = filtered[mask]
+
+    if zip_filter and zip_filter != 'All':
+        filtered = filtered[
+            filtered['ZIP'].astype(str).str.split('.').str[0] == zip_filter
+        ]
+
+    cards = []
+    for _, row in filtered.sort_values('BRANCH').iterrows():
+        zip_clean = str(row['ZIP']).split('.')[0]
+        cards.append(
+            html.Div([
+                # Branch name header
+                html.Div(row['BRANCH'],
+                         style={'fontSize': '15px', 'fontWeight': '600',
+                                'color': cpl_white, 'backgroundColor': cpl_green,
+                                'padding': '10px 14px', 'borderRadius': '6px 6px 0 0'}),
+                # Card body
+                html.Div([
+                    html.P([html.B('📍 '), f"{row['ADDRESS']}, {row['CITY']}, {row['STATE']} {zip_clean}"],
+                           style={'margin': '0 0 8px', 'fontSize': '13px', 'color': cpl_text}),
+                    html.P([html.B('📞 '), row['PHONE']],
+                           style={'margin': '0 0 8px', 'fontSize': '13px', 'color': cpl_text}),
+                    html.P([html.B('✉️ '),
+                            html.A(row['BRANCH EMAIL'],
+                                   href=f"mailto:{row['BRANCH EMAIL']}",
+                                   style={'color': cpl_green, 'textDecoration': 'none'})],
+                           style={'margin': '0 0 8px', 'fontSize': '13px'}),
+                    html.P([html.B('🕐 '), row['SERVICE HOURS']],
+                           style={'margin': '0 0 12px', 'fontSize': '12px',
+                                  'color': cpl_text_muted, 'lineHeight': '1.5'}),
+                    html.A('Visit Branch Page →',
+                           href=row['WEBSITE'], target='_blank',
+                           style={'fontSize': '12px', 'color': cpl_green,
+                                  'fontWeight': '600', 'textDecoration': 'none'})
+                ], style={'padding': '12px 14px'})
+
+            ], style={
+                'backgroundColor': cpl_white,
+                'borderRadius': '6px',
+                'boxShadow': '0 1px 4px rgba(0,0,0,0.08)',
+                'width': '280px',
+                'flexShrink': '0'
+            })
+        )
+
+    summary = f"Showing {len(filtered)} of {len(locs)} branches"
+    return cards, summary
+
+
+# ── Callback: show branch detail panel on map click ───────────────────────────
+@app.callback(
+    Output('branch-detail-panel', 'children'),
+    Output('branch-detail-panel', 'style'),
+    Input('map', 'clickData')
+)
+def show_branch_detail(click_data):
+    hidden = {'display': 'none'}
+    if not click_data:
+        return None, hidden
+
+    branch_name = click_data['points'][0].get('hovertext', '')
+    row = locs[locs['BRANCH'] == branch_name]
+    if row.empty:
+        return None, hidden
+
+    row = row.iloc[0]
+    zip_clean = str(row['ZIP']).split('.')[0]
+
+    panel = html.Div([
+        html.Div([
+            html.Span(row['BRANCH'],
+                      style={'fontSize': '16px', 'fontWeight': '600', 'color': cpl_white}),
+            html.Span('✕', id='close-panel',
+                      style={'float': 'right', 'cursor': 'pointer',
+                             'fontSize': '16px', 'color': cpl_white})
+        ], style={'backgroundColor': cpl_green, 'padding': '12px 16px'}),
+
+        html.Div([
+            html.Div([
+                html.P([html.B('📍 Address  '),
+                        f"{row['ADDRESS']}, {row['CITY']}, {row['STATE']} {zip_clean}"],
+                       style={'margin': '0 0 10px', 'fontSize': '13px'}),
+                html.P([html.B('📞 Phone  '), row['PHONE']],
+                       style={'margin': '0 0 10px', 'fontSize': '13px'}),
+                html.P([html.B('✉️ Email  '),
+                        html.A(row['BRANCH EMAIL'], href=f"mailto:{row['BRANCH EMAIL']}",
+                               style={'color': cpl_green})],
+                       style={'margin': '0 0 10px', 'fontSize': '13px'}),
+                html.P([html.B('🕐 Hours  '), row['SERVICE HOURS']],
+                       style={'margin': '0 0 10px', 'fontSize': '13px',
+                              'color': cpl_text_muted}),
+                html.A('Visit Branch Page →', href=row['WEBSITE'], target='_blank',
+                       style={'fontSize': '13px', 'color': cpl_green, 'fontWeight': '600'})
+            ], style={'padding': '14px 16px'})
+        ])
+    ])
+
+    visible = {
+        'display': 'block',
+        'backgroundColor': cpl_white,
+        'border': f'1px solid {cpl_green}',
+        'borderRadius': '6px',
+        'boxShadow': '0 2px 8px rgba(0,0,0,0.12)',
+        'margin': '0 16px 16px',
+    }
+    return panel, visible
 
 # ── Callback: switch tab content ───────────────────────────────────────────────
 @app.callback(
@@ -314,15 +516,18 @@ def render_tab(tab):
         return dashboard_layout
     elif tab == 'tab-events':
         return events_layout
+    elif tab == 'tab-directory':
+        return directory_layout
     
 # ── Callback Dashboard Charts ───────────────────────────────────────────────────────────────────
 @app.callback(
     Output('map',         'figure'),
     Output('bar-chart',   'figure'),
     Output('ratio-chart', 'figure'),
-    Input('year-slider',  'value')
+    Input('year-slider',  'value'),
+    Input('exclude-hw', 'value')
 )
-def update(selected_year):
+def update(selected_year, exclude_hw):
     dff = df[df['YEAR'] == selected_year].copy()
     
     dff[['VISITORS', 'CIRCULATION', 'COMPUTER SESSIONS']] = (
@@ -330,13 +535,16 @@ def update(selected_year):
     )
     
     dff['DIGITAL'] = dff['COMPUTER SESSIONS']
-    dff['PHYSICAL'] = dff['VISITORS'] + dff['CIRCULATION']
+    dff['PHYSICAL'] = dff['CIRCULATION']
     dff['TOTAL'] = dff['DIGITAL'] + dff['PHYSICAL']
     dff['DIGITAL_RATIO'] = (dff['DIGITAL'] / dff['TOTAL'].replace(0, np.nan) * 100).round(1).fillna(0)
     
     dff = dff[dff['TOTAL'] > 0]
     dff = dff[dff['LAT'].notna() & dff['LON'].notna()]
     dff = dff[dff['VISITORS'] > 0]
+    
+    if exclude_hw and 'exclude' in exclude_hw:
+        dff = dff[dff['BRANCH'] != 'Harold Washington Library Center']
 
     COLOR_SCALE = 'RdYlBu_r'
     COLOR_RANGE = [0, 60]   # most branches sit between 0–60%; full 0–100 compresses the scale
