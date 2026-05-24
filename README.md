@@ -8,24 +8,24 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
 ## CONTENTS
 
 \assets<br/>
-> Contains the Chicago Public Library image
+    Contains the Chicago Public Library image
     
-\data
-    \combined
-        This is the combined data files after running clean_data.py.  
-    \prior2020data
-        This contains all data prior to 2020. This was removed because there was too much missing data.
-    \raw_data
-        This contains the raw source data is from the Chicago Data Portal website, https://data.cityofchicago.org/.
+\data<br/>
+    \combined<br/>
+        This is the combined data files after running clean_data.py<br/>  
+    \prior2020data<br/>
+        This contains all data prior to 2020. This was removed because there was too much missing data<br/>
+    \raw_data<br/>
+        This contains the raw source data is from the Chicago Data Portal website, https://data.cityofchicago.org/<br/>
 
-clean_data.py
-    Run this file to clean the raw data into the combined files, the master_combined.csv, and master_with_coords.csv.
+clean_data.py<br/>
+    Run this file to clean the raw data into the combined files, the master_combined.csv, and master_with_coords.csv<br/>
 
-project_app.py
-    This will display the full dashboard.
+project_app.py<br/>
+    This will display the full dashboard<br/>
     
-requirements.txt
-    The necessary libraries to run this dashboard.
+requirements.txt<br/>
+    The necessary libraries to run this dashboard<br/>
 
 ## HOW TO RUN
 
