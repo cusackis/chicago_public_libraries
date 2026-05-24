@@ -56,19 +56,21 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
 
        pip install -r requirements.txt
    
-4. Create an App token to access the API
-        Go to data.cityofchicago.org and login or create a login
-        Once logged in, access Developer Tools by hitting the drop down menu on your username
-        Select 'Create new app token' on the bottom right of the page
+4. Create an App token to access the API<br/>
+
+        Go to data.cityofchicago.org and login or create a login.
+        Once logged in, access Developer Tools by selecting the drop down menu on your username.
+        Select 'Create new app token' on the bottom right of the page.
         Fill out the the app name and description as appropriate.
-        Copy and paste the app token into project_app.py at line 27.
+        Copy and paste the app token into project_app.py under the API CONFIG section, around line 34.
         ***COPY THE APP TOKEN, NOT THE SECRET TOKEN***
         Save the file.
-5. Run the app.
+   
+6. Run the app.
 
        python app.py
    
-6. Open the local address shown in the terminal.
+7. Open the local address shown in the terminal.
     
        http://127.0.0.1:8050/
 
