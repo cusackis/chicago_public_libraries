@@ -33,11 +33,15 @@ that include an interactive map of Chicago, a bar chart, and a scatter-plot. It 
 
     Contains images of what the app should look like when initialized<br/>
   
-4. project_app.py<br/>
+4. WriteUp.pdf<br/>
+
+    An analysis for the motivations and data behind the dashboard.
+   
+5. project_app.py<br/>
 
     This will display the full dashboard<br/>
    
-5. requirements.txt<br/>
+6. requirements.txt<br/>
 
     The necessary libraries to run this dashboard<br/>
 
