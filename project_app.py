@@ -30,7 +30,7 @@ df['DIGITAL_RATIO'] = (df['DIGITAL'] / df['TOTAL'].replace(0, np.nan) * 100).rou
 years = sorted(df['YEAR'].unique().tolist())
 
 # ── API config ─────────────────────────────────────────────────────────────────
-APP_TOKEN  = 'YOUR_TOKEN_HERE'
+APP_TOKEN  = 'YOUR-API-TOKEN-HERE'
 EVENTS_URL = 'https://data.cityofchicago.org/resource/vsdy-d8k7.json'
 
 def fetch_events(limit=500):
@@ -96,7 +96,7 @@ dashboard_layout = html.Div([
             marks={int(y): {'label': str(y), 
                             'style': {'fontSize': '12px', 'color': cpl_text_muted}} 
                    for y in years},
-            tooltip={'placement': 'bottom', 'always_visible': False}
+            tooltip={'placement': 'bottom', 'always_visible': False},
         ),
         dcc.Checklist(
             id='exclude-hw',
@@ -104,15 +104,31 @@ dashboard_layout = html.Div([
             value=[],
             style={'fontSize': '13px', 'color': cpl_text_muted}
         )
-    ], style={'padding': '16px 32px 16px', 'backgroundColor': cpl_white,
-              'borderBottom': f'1px solid #e0e0e0'}),
-
+    ], style={'padding': '20px 40px', 'backgroundColor': cpl_white,
+                   'borderBottom': '1px solid #E0E0E0',
+                   'boxShadow': '0 1px 3px rgba(0,0,0,0.04)'}),
+    
+    html.Div(id='kpi-cards', style={
+    'display': 'flex', 'gap': '12px',
+    'padding': '12px 16px',
+    'backgroundColor': cpl_gray,
+    }),
+    
     # Map
-    dcc.Graph(id='map', style={'height': '480px'}),
+    dcc.Graph(id='map', style={
+        'height': '480px',
+        'margin': '12px 16px 0',
+        'borderRadius': '8px',
+        'overflow': 'hidden',
+        'boxShadow': '0 1px 6px rgba(0,0,0,0.10)'
+        }),
     
     # Collapsible detail panel — appears when a map bubble is clicked
     html.Div(id='branch-detail-panel',
-         style={'display': 'none'}),  # hidden by default
+         style={'display': 'none'}),
+    
+    html.Button(id='close-panel', n_clicks=0,
+                style={'display': 'none'}),
     
     # Bottom row of two graphs
     html.Div([
@@ -313,10 +329,10 @@ app.layout = html.Div([
     html.Div([
         html.P(
             'This dashboard explores how Chicago Public Library branches are utilized across the city. '
-            'Each branch is measured across three dimension: total annual visitors, physical circulation'
+            'Each branch is measured across three dimension: total annual visitors, physical circulation '
             '(physical materials checked out), and digital demand (computer sessions). '
             'The digital demand ratio reflects what share of a branch\'s total activity is digital. '
-            'Branches with a higher percentage may reflect a reliance on the public library'
+            'Branches with a higher percentage may reflect a reliance on the public library '
             'as the primary point of digital connection.',
             style={'margin': '0 0 12px', 'fontSize': '14px', 'color': cpl_text,
                    'lineHeight': '1.7', 'maxWidth': '960px'}
@@ -353,7 +369,7 @@ app.layout = html.Div([
                                     'fontWeight': '600',
                                     'borderTop': f'3px solid {cpl_green}',
                                     'color': cpl_green}),
-            dcc.Tab(label='📋 Branch Directory', value='tab-directory',
+            dcc.Tab(label='Branch Directory', value='tab-directory',
                     style={'fontFamily': 'Arial', 'fontSize': '14px', 'minWidth': '160px'},
                     selected_style={'fontFamily': 'Arial', 'fontSize': '14px',
                         'fontWeight': '600', 'minWidth': '160px',
@@ -452,10 +468,18 @@ def update_directory(search, zip_filter):
 @app.callback(
     Output('branch-detail-panel', 'children'),
     Output('branch-detail-panel', 'style'),
-    Input('map', 'clickData')
+    Input('map', 'clickData'),
+    Input('close-panel', 'n-clicks'),
+    prevent_initial_call=True
 )
-def show_branch_detail(click_data):
+def show_branch_detail(click_data, close_clicks):
+    from dash import ctx
+    
     hidden = {'display': 'none'}
+    
+    if ctx.triggered_id == 'close-panel':
+        return None, hidden
+    
     if not click_data:
         return None, hidden
 
@@ -471,9 +495,10 @@ def show_branch_detail(click_data):
         html.Div([
             html.Span(row['BRANCH'],
                       style={'fontSize': '16px', 'fontWeight': '600', 'color': cpl_white}),
-            html.Span('✕', id='close-panel',
-                      style={'float': 'right', 'cursor': 'pointer',
-                             'fontSize': '16px', 'color': cpl_white})
+            html.Button('✕', id='close-panel-btn', n_clicks=0,
+                      style={'float': 'right', 'background': 'none',
+                             'fontSize': '16px', 'color': cpl_white,
+                             'cursor': 'pointer'})
         ], style={'backgroundColor': cpl_green, 'padding': '12px 16px'}),
 
         html.Div([
@@ -519,38 +544,77 @@ def render_tab(tab):
     elif tab == 'tab-directory':
         return directory_layout
     
-# ── Callback Dashboard Charts ───────────────────────────────────────────────────────────────────
+# ── Combined callback: charts + KPI cards ─────────────────────────────────────
 @app.callback(
-    Output('map',         'figure'),
-    Output('bar-chart',   'figure'),
-    Output('ratio-chart', 'figure'),
-    Input('year-slider',  'value'),
-    Input('exclude-hw', 'value')
+    Output('map',        'figure'),
+    Output('bar-chart',  'figure'),
+    Output('ratio-chart','figure'),
+    Output('kpi-cards',  'children'),
+    Input('year-slider', 'value'),
+    Input('exclude-hw',  'value')
 )
 def update(selected_year, exclude_hw):
     dff = df[df['YEAR'] == selected_year].copy()
-    
-    dff[['VISITORS', 'CIRCULATION', 'COMPUTER SESSIONS']] = (
-        dff[['VISITORS', 'CIRCULATION', 'COMPUTER SESSIONS']].fillna(0)
-    )
-    
-    dff['DIGITAL'] = dff['COMPUTER SESSIONS']
-    dff['PHYSICAL'] = dff['CIRCULATION']
-    dff['TOTAL'] = dff['DIGITAL'] + dff['PHYSICAL']
-    dff['DIGITAL_RATIO'] = (dff['DIGITAL'] / dff['TOTAL'].replace(0, np.nan) * 100).round(1).fillna(0)
-    
-    dff = dff[dff['TOTAL'] > 0]
-    dff = dff[dff['LAT'].notna() & dff['LON'].notna()]
-    dff = dff[dff['VISITORS'] > 0]
-    
+
+    # ── Safe column filling ────────────────────────────────────────────────────
+    for col in ['VISITORS', 'CIRCULATION', 'COMPUTER SESSIONS']:
+        if col in dff.columns:
+            dff[col] = pd.to_numeric(dff[col], errors='coerce').fillna(0)
+        else:
+            dff[col] = 0
+
     if exclude_hw and 'exclude' in exclude_hw:
         dff = dff[dff['BRANCH'] != 'Harold Washington Library Center']
 
+    dff['DIGITAL']       = dff['COMPUTER SESSIONS']
+    dff['PHYSICAL']      = dff['CIRCULATION']
+    dff['TOTAL']         = dff['DIGITAL'] + dff['PHYSICAL']
+    dff['DIGITAL_RATIO'] = (
+        dff['DIGITAL'] / dff['TOTAL'].replace(0, np.nan) * 100
+    ).round(1).fillna(0)
+
+    dff = dff[dff['TOTAL'] > 0]
+    dff = dff[dff['LAT'].notna() & dff['LON'].notna()]
+    dff = dff[dff['VISITORS'] > 0]
+
     COLOR_SCALE = 'RdYlBu_r'
-    COLOR_RANGE = [0, 60]   # most branches sit between 0–60%; full 0–100 compresses the scale
-    PLOT_BG     = cpl_green_light    
-    
-# ── Map ────────────────────────────────────────────────────────────────────
+    COLOR_RANGE = [0, 60]
+    PLOT_BG     = cpl_green_light
+
+    # ── KPI cards ─────────────────────────────────────────────────────────────
+    total_v  = dff['VISITORS'].sum()
+    total_c  = dff['CIRCULATION'].sum()
+    total_cs = dff['COMPUTER SESSIONS'].sum()
+    total    = total_v + total_c + total_cs
+    dig_pct  = (total_cs / total * 100) if total > 0 else 0
+
+    def card(icon, label, value):
+        return html.Div([
+            html.P(f'{icon}  {label}',
+                   style={'margin': '0 0 6px', 'fontSize': '11px',
+                          'color': cpl_text_muted, 'fontWeight': '600',
+                          'textTransform': 'uppercase',
+                          'letterSpacing': '0.05em'}),
+            html.P(str(value),
+                   style={'margin': '0', 'fontSize': '24px',
+                          'fontWeight': '700', 'color': cpl_green})
+        ], style={
+            'flex': '1', 'minWidth': '150px',
+            'backgroundColor': cpl_white,
+            'borderRadius': '8px',
+            'padding': '16px 20px',
+            'boxShadow': '0 1px 4px rgba(0,0,0,0.07)',
+            'borderTop': f'3px solid {cpl_green}'
+        })
+
+    kpi_cards = [
+        card('👥', 'Total Visitors',    f'{total_v:,.0f}'),
+        card('📚', 'Circulation',       f'{total_c:,.0f}'),
+        card('💻', 'Computer Sessions', f'{total_cs:,.0f}'),
+        card('📊', 'Digital Demand',    f'{dig_pct:.1f}%'),
+    ]
+
+    # ── Map ───────────────────────────────────────────────────────────────────
     map_fig = px.scatter_mapbox(
         dff,
         lat='LAT', lon='LON',
@@ -559,8 +623,8 @@ def update(selected_year, exclude_hw):
         color_continuous_scale=COLOR_SCALE,
         range_color=COLOR_RANGE,
         size_max=45,
-        zoom=10,
-        center={'lat': 41.8781, 'lon': -87.6298},
+        zoom=11,
+        center={'lat': 41.8781, 'lon': -87.7298},
         mapbox_style='carto-positron',
         hover_name='BRANCH',
         hover_data={
@@ -587,7 +651,8 @@ def update(selected_year, exclude_hw):
             y=0.5
         )
     )
-    # ── Bar: top 15 by visitors, colored by digital ratio ─────────────────────
+
+    # ── Bar: top 15 by visitors ────────────────────────────────────────────────
     top15 = dff.nlargest(15, 'VISITORS').sort_values('VISITORS')
     bar_fig = px.bar(
         top15,
@@ -597,7 +662,8 @@ def update(selected_year, exclude_hw):
         color_continuous_scale=COLOR_SCALE,
         range_color=COLOR_RANGE,
         text='VISITORS',
-        labels={'VISITORS': 'Annual visitors', 'BRANCH': '', 'DIGITAL_RATIO': 'Digital %'},
+        labels={'VISITORS': 'Annual visitors', 'BRANCH': '',
+                'DIGITAL_RATIO': 'Digital %'},
         title=f'Top 15 branches by visitors ({selected_year})'
     )
     bar_fig.update_traces(
@@ -607,14 +673,16 @@ def update(selected_year, exclude_hw):
     )
     bar_fig.update_layout(
         plot_bgcolor=PLOT_BG, paper_bgcolor=cpl_white,
-        margin=dict(l=8, r=60, t=40, b=20),
+        margin=dict(l=8, r=100, t=40, b=20),
         showlegend=False,
         coloraxis_showscale=False,
         font=dict(size=11),
-        xaxis=dict(showgrid=True, gridcolor='#E5E5E5', zeroline=False),
+        xaxis=dict(showgrid=True, gridcolor='#E5E5E5', zeroline=False,
+                   range=[0, dff['VISITORS'].max() * 1.25]),
         yaxis=dict(showgrid=False)
     )
-    # ── Scatter: digital ratio vs visitors, sized by circulation ──────────────
+
+    # ── Scatter: digital ratio vs visitors ─────────────────────────────────────
     ratio_fig = px.scatter(
         dff,
         x='DIGITAL_RATIO',
@@ -633,7 +701,6 @@ def update(selected_year, exclude_hw):
         },
         title=f'Digital demand vs. visitors ({selected_year})'
     )
-    # Add median reference line
     median_ratio = dff['DIGITAL_RATIO'].median()
     ratio_fig.add_vline(
         x=median_ratio,
@@ -644,23 +711,21 @@ def update(selected_year, exclude_hw):
         annotation_font_color='#888'
     )
     ratio_fig.update_layout(
-        plot_bgcolor=PLOT_BG, paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG, paper_bgcolor=cpl_white,
         margin=dict(l=8, r=20, t=40, b=20),
         showlegend=False,
         coloraxis_showscale=False,
         font=dict(size=11),
-        xaxis=dict(
-            ticksuffix='%', showgrid=True,
-            gridcolor='#E5E5E5', zeroline=False,
-            range=[-2, COLOR_RANGE[1] + 5]
-        ),
+        xaxis=dict(ticksuffix='%', showgrid=True, gridcolor='#E5E5E5',
+                   zeroline=False, range=[-2, COLOR_RANGE[1] + 5]),
         yaxis=dict(showgrid=True, gridcolor='#E5E5E5')
     )
     ratio_fig.update_traces(
         marker=dict(opacity=0.75, line=dict(width=0.5, color='white'))
     )
 
-    return map_fig, bar_fig, ratio_fig
+    # ── Single return with all four outputs ────────────────────────────────────
+    return map_fig, bar_fig, ratio_fig, kpi_cards
 
 # ── Callback: populate event dropdowns ────────────────────────────────
 @app.callback(
