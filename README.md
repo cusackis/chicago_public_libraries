@@ -13,21 +13,21 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
     
 2.\data<br/>
 
-    -\combined<br/>
+    \combined<
     
-        This is the combined data files after running clean_data.py<br/>  
+        This is the combined data files after running clean_data.py
         
-    -\prior2020data<br/>
+    \prior2020data
     
-        This contains all data prior to 2020. This was removed because there was too much missing data<br/>
+        This contains all data prior to 2020. This was removed because there was too much missing data
         
-    -\raw_data<br/>
+    \raw_data
     
-        This contains the raw source data is from the Chicago Data Portal website, https://data.cityofchicago.org/<br/>
+        This contains the raw source data is from the Chicago Data Portal website, https://data.cityofchicago.org/
         
-    -clean_data.py<br/>
+    clean_data.py
     
-        Run this file to clean the raw data into the combined files, the master_combined.csv, and master_with_coords.csv<br/>
+        Run this file to clean the raw data into the combined files, the master_combined.csv, and master_with_coords.csv
         
 3. project_app.py<br/>
 
