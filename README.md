@@ -13,7 +13,7 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
     
 2.\data<br/>
 
-    \combined<
+    \combined
     
         This is the combined data files after running clean_data.py
         
