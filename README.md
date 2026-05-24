@@ -8,7 +8,7 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
 ## CONTENTS
 
 \assets<br/>
-    > Contains the Chicago Public Library image
+> Contains the Chicago Public Library image
     
 \data
     \combined
