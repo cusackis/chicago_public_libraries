@@ -29,7 +29,11 @@ that include an interactive map of Chicago, a bar chart, and a scatter-plot. It 
     
         Run this file to clean the raw data into the combined files, the master_combined.csv, and master_with_coords.csv
         
-3. project_app.py<br/>
+3. \screenshots<br/>
+
+    Contains images of what the app should look like when initialized<br/>
+  
+4. project_app.py<br/>
 
     This will display the full dashboard<br/>
    
