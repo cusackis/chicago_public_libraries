@@ -3,7 +3,7 @@
 ## WELCOME TO THE REPOSITORY FOR THE CHICAGO PUBLIC LIBRARY DATA DASHBOARD
 
 This is a data visualization project for Chicago Public Libraries. It contains three visualizations
-that include a map of Chicago, a bar graph, and a scatter-plot. 
+that include an interactive map of Chicago, a bar chart, and a scatter-plot. It also features a CPL events page that pulls like event data from the Chicago Data Portal API and a branch directory with searchable contact cards.
 
 ## CONTENTS
 
@@ -58,7 +58,7 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
    
 4. Create an App token to access the API<br/>
 
-        Go to data.cityofchicago.org and login or create a login.
+        Go to https://data.cityofchicago.org and login or create a login.
         Once logged in, access Developer Tools by selecting the drop down menu on your username.
         Select 'Create new app token' on the bottom right of the page.
         Fill out the the app name and description as appropriate.
@@ -86,3 +86,6 @@ that include a map of Chicago, a bar graph, and a scatter-plot.
 8. Callback to allow for tab changes and dashboard updates
 9. Map, bar chart, and scatterplot configurtion
 10. Callback to allow for updating the event tab
+
+## DATA SOURCE
+Raw data is sourced from the [Chicago Data Portal](https://data.cityofchicago.org/).
